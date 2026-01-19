@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        REGISTRY = "docker.io/yourdockerhubusername"  // Change this
-        IMAGE = "lab-site"                            // Image name
-        CREDS = "dockerhub-creds"                     // Jenkins credential ID
+        DOCKER_REGISTRY = "docker.io/yourdockerhubusername"
+        IMAGE_NAME = "lab-site"
+        CREDS = "dockerhub-creds"
     }
 
     stages {
@@ -19,33 +19,33 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: "${CREDS}",
-                    usernameVariable: 'USER',
-                    passwordVariable: 'PASS'
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
                 )]) {
                     bat '''
                     echo Logging in...
-                    docker login %REGISTRY% -u %USER% -p %PASS%
+                    docker login %DOCKER_REGISTRY% -u %DOCKER_USER% -p %DOCKER_PASS%
                     '''
                 }
             }
         }
 
-        stage('Build Image') {
+        stage('Build Docker Image') {
             steps {
                 bat '''
-                echo Building image...
-                docker build -t %REGISTRY%/%IMAGE%:%BUILD_NUMBER% .
+                echo Building Docker image...
+                docker build -t %DOCKER_REGISTRY%/%IMAGE_NAME%:%BUILD_NUMBER% .
                 '''
             }
         }
 
-        stage('Push Image') {
+        stage('Push Docker Image') {
             steps {
                 bat '''
-                echo Pushing image...
-                docker push %REGISTRY%/%IMAGE%:%BUILD_NUMBER%
-                docker tag %REGISTRY%/%IMAGE%:%BUILD_NUMBER% %REGISTRY%/%IMAGE%:latest
-                docker push %REGISTRY%/%IMAGE%:latest
+                echo Pushing Docker image...
+                docker push %DOCKER_REGISTRY%/%IMAGE_NAME%:%BUILD_NUMBER%
+                docker tag %DOCKER_REGISTRY%/%IMAGE_NAME%:%BUILD_NUMBER% %DOCKER_REGISTRY%/%IMAGE_NAME%:latest
+                docker push %DOCKER_REGISTRY%/%IMAGE_NAME%:latest
                 '''
             }
         }
@@ -53,7 +53,11 @@ pipeline {
     }
 
     post {
-        success { echo "Build & push succeeded!" }
-        failure { echo "Build or push failed." }
+        success {
+            echo "Build & push completed successfully!"
+        }
+        failure {
+            echo "Build or push failed — check logs."
+        }
     }
 }
