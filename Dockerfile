@@ -1,10 +1,10 @@
-# Use the official NGINX image as a base
+# Use nginx to serve the site
 FROM nginx:alpine
 
-# Copy your static site files into the container
-COPY ./public /usr/share/nginx/html
+# Copy all site files into nginx html folder
+COPY . /usr/share/nginx/html
 
-# Expose port 80 to serve the site
+# Expose port 80
 EXPOSE 80
 
 # Start nginx
