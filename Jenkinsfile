@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'windows' }
+    agent any
 
     environment {
         DOCKER_REGISTRY = "docker.io/yourdockerhubusername"
@@ -14,20 +14,10 @@ pipeline {
             }
         }
 
-        stage('Verify Docker') {
-            steps {
-                powershell '''
-                Write-Host "Checking Docker availability..."
-                docker --version
-                docker info
-                '''
-            }
-        }
-
-        stage('Docker Login') {
+        stage('Login to Docker Registry') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: "${env.CREDENTIALS_ID}",
+                    credentialsId: "${CREDENTIALS_ID}",
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
@@ -40,25 +30,29 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                powershell """
+                powershell '''
                 docker build --progress=plain -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER} .
-                """
+                '''
             }
         }
 
         stage('Push Docker Image') {
             steps {
-                powershell """
+                powershell '''
                 docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER}
                 docker tag ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER} ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
                 docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
-                """
+                '''
             }
         }
     }
 
     post {
-        success { echo "Success: build & push complete" }
-        failure { echo "Failed: check output above for detail" }
+        success {
+            echo "Docker build & push completed successfully!"
+        }
+        failure {
+            echo "Docker build or push failed — please check logs."
+        }
     }
 }
