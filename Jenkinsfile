@@ -2,14 +2,14 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY = "docker.io/yourdockerhubusername"   // DockerHub username
-        IMAGE_NAME = "lab-site"                                // image name
-        CREDENTIALS_ID = "dockerhub-creds"                      // Jenkins Credential ID
+        REGISTRY = "docker.io/yourdockerhubusername"  // Change this
+        IMAGE = "lab-site"                            // Image name
+        CREDS = "dockerhub-creds"                     // Jenkins credential ID
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Checkout Code') {
             steps {
                 checkout scm
             }
@@ -18,13 +18,13 @@ pipeline {
         stage('Docker Login') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: "${CREDENTIALS_ID}",
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
+                    credentialsId: "${CREDS}",
+                    usernameVariable: 'USER',
+                    passwordVariable: 'PASS'
                 )]) {
-                    powershell '''
-                    echo "Logging into Docker registry..."
-                    docker login ${env.DOCKER_REGISTRY} -u $env:DOCKER_USER -p $env:DOCKER_PASS
+                    bat '''
+                    echo Logging in...
+                    docker login %REGISTRY% -u %USER% -p %PASS%
                     '''
                 }
             }
@@ -32,20 +32,20 @@ pipeline {
 
         stage('Build Image') {
             steps {
-                powershell '''
-                echo "Building Docker image..."
-                docker build -t ${env.DOCKER_REGISTRY}/${env.IMAGE_NAME}:${env.BUILD_NUMBER} .
+                bat '''
+                echo Building image...
+                docker build -t %REGISTRY%/%IMAGE%:%BUILD_NUMBER% .
                 '''
             }
         }
 
         stage('Push Image') {
             steps {
-                powershell '''
-                echo "Pushing image to registry..."
-                docker push ${env.DOCKER_REGISTRY}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
-                docker tag ${env.DOCKER_REGISTRY}/${env.IMAGE_NAME}:${env.BUILD_NUMBER} ${env.DOCKER_REGISTRY}/${env.IMAGE_NAME}:latest
-                docker push ${env.DOCKER_REGISTRY}/${env.IMAGE_NAME}:latest
+                bat '''
+                echo Pushing image...
+                docker push %REGISTRY%/%IMAGE%:%BUILD_NUMBER%
+                docker tag %REGISTRY%/%IMAGE%:%BUILD_NUMBER% %REGISTRY%/%IMAGE%:latest
+                docker push %REGISTRY%/%IMAGE%:latest
                 '''
             }
         }
@@ -53,11 +53,7 @@ pipeline {
     }
 
     post {
-        success {
-            echo "✅ Build & push completed successfully!"
-        }
-        failure {
-            echo "❌ Build or push failed — check console output"
-        }
+        success { echo "Build & push succeeded!" }
+        failure { echo "Build or push failed." }
     }
 }
