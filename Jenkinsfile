@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'windows' } 
+    agent { label 'windows' }
 
     environment {
         DOCKER_REGISTRY = "docker.io/yourdockerhubusername"
@@ -8,10 +8,19 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Verify Docker') {
+            steps {
+                powershell '''
+                Write-Host "Checking Docker availability..."
+                docker --version
+                docker info
+                '''
             }
         }
 
@@ -32,7 +41,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 powershell """
-                docker build -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER} .
+                docker build --progress=plain -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER} .
                 """
             }
         }
@@ -46,15 +55,10 @@ pipeline {
                 """
             }
         }
-
     }
 
     post {
-        success {
-            echo "Docker built & pushed successfully!"
-        }
-        failure {
-            echo "Docker build or push failed!"
-        }
+        success { echo "Success: build & push complete" }
+        failure { echo "Failed: check output above for detail" }
     }
 }
