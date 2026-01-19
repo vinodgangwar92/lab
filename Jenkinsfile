@@ -1,64 +1,63 @@
 pipeline {
-  agent { label 'windows' }
-  options { timestamps() }
+    agent any
 
-  environment {
-    IMAGE = 'vinodgangwar92/static-site'   // <-- your Docker Hub repo (create it if needed)
-    TAG   = "${env.BUILD_NUMBER}"
-  }
-
-  stages {
-    stage('Checkout') { steps { checkout scm } }
-
-    stage('Diag') {
-      steps {
-        bat '''
-          echo ---- whoami / docker ----
-          whoami
-          docker --version
-          docker info | findstr /I "Server"
-          echo ---- workspace listing ----
-          cd
-          dir /b
-        '''
-      }
+    environment {
+        DOCKER_REGISTRY = "docker.io/yourdockerhubusername"   // DockerHub username
+        IMAGE_NAME = "lab-site"                                // image name
+        CREDENTIALS_ID = "dockerhub-creds"                      // Jenkins Credential ID
     }
 
-    stage('Login to Docker Registry') {
-      steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub',
-                                          usernameVariable: 'DH_USER',
-                                          passwordVariable: 'DH_PASS')]) {
-          bat '''
-            docker logout
-            echo %DH_PASS% | docker login -u %DH_USER% --password-stdin
-          '''
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
         }
-      }
+
+        stage('Docker Login') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: "${CREDENTIALS_ID}",
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    powershell '''
+                    echo "Logging into Docker registry..."
+                    docker login ${env.DOCKER_REGISTRY} -u $env:DOCKER_USER -p $env:DOCKER_PASS
+                    '''
+                }
+            }
+        }
+
+        stage('Build Image') {
+            steps {
+                powershell '''
+                echo "Building Docker image..."
+                docker build -t ${env.DOCKER_REGISTRY}/${env.IMAGE_NAME}:${env.BUILD_NUMBER} .
+                '''
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                powershell '''
+                echo "Pushing image to registry..."
+                docker push ${env.DOCKER_REGISTRY}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}
+                docker tag ${env.DOCKER_REGISTRY}/${env.IMAGE_NAME}:${env.BUILD_NUMBER} ${env.DOCKER_REGISTRY}/${env.IMAGE_NAME}:latest
+                docker push ${env.DOCKER_REGISTRY}/${env.IMAGE_NAME}:latest
+                '''
+            }
+        }
+
     }
 
-    stage('Build Docker Image') {
-      steps {
-        bat '''
-          echo ---- building image ----
-          docker build -f Dockerfile -t %IMAGE%:%TAG% -t %IMAGE%:latest .
-        '''
-      }
+    post {
+        success {
+            echo "✅ Build & push completed successfully!"
+        }
+        failure {
+            echo "❌ Build or push failed — check console output"
+        }
     }
-
-    stage('Push Docker Image') {
-      steps {
-        bat '''
-          echo ---- pushing image ----
-          docker push %IMAGE%:%TAG%
-          docker push %IMAGE%:latest
-        '''
-      }
-    }
-  }
-
-  post {
-    success { echo "✅ Pushed %IMAGE%:%TAG% and :latest" }
-    failure { echo '❌ Build/Push failed — check the Diag/Build logs above' }
-  }
 }
