@@ -1,39 +1,48 @@
 pipeline {
-  agent { label 'windows' }
-  options { timestamps() }
-  environment {
-    IMAGE = 'yourhubuser/static-site'   // <- apna Docker Hub repo
-    TAG   = "${env.BUILD_NUMBER}"
-  }
-  stages {
-    stage('Checkout'){ steps { checkout scm } }
+    agent any
 
-    stage('Build site'){ steps { bat 'echo Building on Windows' } }
+    environment {
+        DOCKER_REGISTRY = "docker.io/yourdockerhubusername"   // your Docker Hub registry
+        IMAGE_NAME = "lab-site"                                // name you want for the image
+        CREDENTIALS_ID = "dockerhub-creds"                      // Jenkins credentials ID
+    }
 
-    stage('Docker login'){
-      steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
-          bat '''
-            docker logout
-            echo %DH_PASS% | docker login -u %DH_USER% --password-stdin
-          '''
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git url: 'https://github.com/vinodgangwar92/lab.git', branch: 'main'
+            }
         }
-      }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    // Build image and tag with Jenkins BUILD_NUMBER
+                    dockerImage = docker.build("${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER}")
+                }
+            }
+        }
+
+        stage('Push Image to Registry') {
+            steps {
+                script {
+                    // Login and push image with tags
+                    docker.withRegistry("https://${DOCKER_REGISTRY}", "${CREDENTIALS_ID}") {
+                        dockerImage.push("${env.BUILD_NUMBER}")
+                        dockerImage.push("latest")
+                    }
+                }
+            }
+        }
     }
 
-    stage('Docker build'){
-      steps { bat 'docker build -t %IMAGE%:%TAG% -t %IMAGE%:latest .' }
+    post {
+        success {
+            echo "Docker image built and pushed successfully!"
+        }
+        failure {
+            echo "Docker build or push failed! Check logs."
+        }
     }
-
-    stage('Docker push'){
-      steps {
-        bat 'docker push %IMAGE%:%TAG%'
-        bat 'docker push %IMAGE%:latest'
-      }
-    }
-  }
-  post {
-    success { echo "✅ Pushed %IMAGE%:%TAG% and :latest" }
-    failure { echo '❌ Build/Push failed — console output check karein' }
-  }
 }
