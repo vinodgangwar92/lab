@@ -1,48 +1,60 @@
 pipeline {
-    agent any
+    agent { label 'windows' } 
 
     environment {
-        DOCKER_REGISTRY = "docker.io/yourdockerhubusername"   // your Docker Hub registry
-        IMAGE_NAME = "lab-site"                                // name you want for the image
-        CREDENTIALS_ID = "dockerhub-creds"                      // Jenkins credentials ID
+        DOCKER_REGISTRY = "docker.io/yourdockerhubusername"
+        IMAGE_NAME = "lab-site"
+        CREDENTIALS_ID = "dockerhub-creds"
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Checkout Code') {
             steps {
-                git url: 'https://github.com/vinodgangwar92/lab.git', branch: 'main'
+                checkout scm
+            }
+        }
+
+        stage('Docker Login') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: "${env.CREDENTIALS_ID}",
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    powershell '''
+                    docker login ${env.DOCKER_REGISTRY} -u $env:DOCKER_USER -p $env:DOCKER_PASS
+                    '''
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    // Build image and tag with Jenkins BUILD_NUMBER
-                    dockerImage = docker.build("${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER}")
-                }
+                powershell """
+                docker build -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER} .
+                """
             }
         }
 
-        stage('Push Image to Registry') {
+        stage('Push Docker Image') {
             steps {
-                script {
-                    // Login and push image with tags
-                    docker.withRegistry("https://${DOCKER_REGISTRY}", "${CREDENTIALS_ID}") {
-                        dockerImage.push("${env.BUILD_NUMBER}")
-                        dockerImage.push("latest")
-                    }
-                }
+                powershell """
+                docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER}
+                docker tag ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER} ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
+                docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
+                """
             }
         }
+
     }
 
     post {
         success {
-            echo "Docker image built and pushed successfully!"
+            echo "Docker built & pushed successfully!"
         }
         failure {
-            echo "Docker build or push failed! Check logs."
+            echo "Docker build or push failed!"
         }
     }
 }
