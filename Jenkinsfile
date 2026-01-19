@@ -1,10 +1,10 @@
 pipeline {
-    agent { label 'windows' }  // use a Windows agent that has Docker installed
+    agent { label 'windows' }  // Use a Windows agent that has Docker installed
 
     environment {
-        REGISTRY = "docker.io/yourdockerhubusername"     // e.g., Docker Hub registry
-        IMAGE_NAME = "lab‑site"                           // name for your image
-        DOCKER_CREDENTIALS = "dockerhub‑creds"           // Jenkins credential ID
+        REGISTRY = "docker.io/yourdockerhubusername"   // your Docker Hub username
+        IMAGE_NAME = "lab-site"                       // name for the image
+        DOCKER_CREDENTIALS = "dockerhub-creds"        // Jenkins credential ID
     }
 
     stages {
@@ -23,7 +23,7 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     powershell '''
-                    Write‑Host "Logging into Docker registry..."
+                    Write‑Host "Logging into Docker..."
                     docker login ${env.REGISTRY} -u $env:DOCKER_USER -p $env:DOCKER_PASS
                     '''
                 }
@@ -42,23 +42,24 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 powershell """
-                Write‑Host "Pushing image to registry..."
+                Write‑Host "Pushing Docker image..."
                 docker push ${REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER}
 
-                Write‑Host "Also tagging latest..."
+                Write‑Host "Tagging latest..."
                 docker tag ${REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER} ${REGISTRY}/${IMAGE_NAME}:latest
                 docker push ${REGISTRY}/${IMAGE_NAME}:latest
                 """
             }
         }
+
     }
 
     post {
         success {
-            echo "Docker build and push succeeded!"
+            echo "Docker image built & pushed successfully!"
         }
         failure {
-            echo "Pipeline failed. Please check logs!"
+            echo "Build/push failed — check the logs."
         }
     }
 }
