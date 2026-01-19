@@ -1,65 +1,60 @@
 pipeline {
-    agent { label 'windows' }  // Use a Windows agent that has Docker installed
+  agent { label 'windows' }
+  options { timestamps() }
 
-    environment {
-        REGISTRY = "docker.io/yourdockerhubusername"   // your Docker Hub username
-        IMAGE_NAME = "lab-site"                       // name for the image
-        DOCKER_CREDENTIALS = "dockerhub-creds"        // Jenkins credential ID
+  environment {
+    IMAGE = 'yourhubuser/static-site'   // <- apna Docker Hub repo daalo
+    TAG   = "${env.BUILD_NUMBER}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
     }
 
-    stages {
-
-        stage('Checkout Code') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Docker Login') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: "${env.DOCKER_CREDENTIALS}",
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    powershell '''
-                    Write‑Host "Logging into Docker..."
-                    docker login ${env.REGISTRY} -u $env:DOCKER_USER -p $env:DOCKER_PASS
-                    '''
-                }
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                powershell """
-                Write‑Host "Building Docker image..."
-                docker build -t ${REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER} .
-                """
-            }
-        }
-
-        stage('Push Docker Image') {
-            steps {
-                powershell """
-                Write‑Host "Pushing Docker image..."
-                docker push ${REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER}
-
-                Write‑Host "Tagging latest..."
-                docker tag ${REGISTRY}/${IMAGE_NAME}:${env.BUILD_NUMBER} ${REGISTRY}/${IMAGE_NAME}:latest
-                docker push ${REGISTRY}/${IMAGE_NAME}:latest
-                """
-            }
-        }
-
+    stage('Build site') {
+      steps { bat 'echo Building static site on Windows' }
     }
 
-    post {
-        success {
-            echo "Docker image built & pushed successfully!"
+    stage('Docker login') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub',
+                                          usernameVariable: 'DH_USER',
+                                          passwordVariable: 'DH_PASS')]) {
+          bat '''
+            docker logout
+            echo %DH_PASS% | docker login -u %DH_USER% --password-stdin
+          '''
         }
-        failure {
-            echo "Build/push failed — check the logs."
-        }
+      }
     }
+
+    stage('Docker build') {
+      steps {
+        bat '''
+          docker build -t %IMAGE%:%TAG% -t %IMAGE%:latest .
+        '''
+      }
+    }
+
+    stage('Docker push') {
+      steps {
+        bat '''
+          docker push %IMAGE%:%TAG%
+          docker push %IMAGE%:latest
+        '''
+      }
+    }
+
+    stage('Archive static files') {
+      steps {
+        archiveArtifacts artifacts: '*/.html, */.css, */.js, images/**', fingerprint: true
+      }
+    }
+  }
+
+  post {
+    success { echo "✅ Pushed %IMAGE%:%TAG% and :latest" }
+    failure { echo '❌ Build/Push failed — console output dekho' }
+  }
 }
